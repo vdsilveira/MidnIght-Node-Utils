@@ -35,22 +35,26 @@ sudo bash -c "$(curl -fsSL https://raw.githubusercontent.com/vdsilveira/MidnIght
 |---|---|---|---|
 | `v1.0` | 2026-07-10 | ~4 GB (3 partes) | db-sync preprod completo (~27 GB original) |
 
-**Como restaurar manualmente:**
+**Como restaurar manualmente (usar `/root/` — `/tmp` é tmpfs com tamanho limitado):**
 
 ```bash
 # Download + restore em um comando
+mkdir -p /root/snapshot-restore
 gh release download v1.0 \
   --repo vdsilveira/MidnIght-Node-Utils \
-  --dir /tmp/snapshot
+  --dir /root/snapshot-restore
 
-cat /tmp/snapshot/cexplorer-snapshot-*.part_* | zstd -d | \
+cat /root/snapshot-restore/cexplorer-snapshot-*.part_* | zstd -d | \
   docker exec -i midnight-postgres \
-    pg_restore -U postgres -d cexplorer --no-owner
+    pg_restore -U midnight -d cexplorer --no-owner
 
 # Verificar
 docker exec -it midnight-postgres \
-  psql -U postgres -d cexplorer -c 'SELECT count(*) FROM block;'
+  psql -U midnight -d cexplorer -c 'SELECT count(*) FROM block;'
 ```
+
+**Snapshot validado:** testado com restore + conexão ao cardano-node + sync contínuo
+sem erros de consenso (4.920.901 blocks, 75 tabelas, 26 GB).
 
 ### midnight-node (futuro)
 
@@ -114,6 +118,8 @@ tar -I 'zstd -3' -cf /tmp/midnight-snapshot-$(date +%Y%m%d).tar.zst \
 | `--rpc-external --rpc-port 19944` | RPC acessível via SSH tunnel |
 | `CARDANO_SECURITY_PARAMETER=2160` | Exigido pelo midnight-node em preprod |
 | `PGSSLMODE=disable` | Conexão local com PostgreSQL sem SSL |
+| `POSTGRES_HOST=localhost` | Usar `localhost` (não `127.0.0.1`) — db-sync 13.6.x quebra com IP |
+| `POSTGRES_USER=midnight` | Usuário do PostgreSQL (configurável via env var) |
 
 ## Solução de Problemas
 
@@ -145,3 +151,17 @@ echo '/swapfile none swap sw 0 0' >> /etc/fstab
 ```
 
 E use pipe com zstd em vez de `-Z` interno do pg_dump (menos memória).
+
+### db-sync: "libpq: failed (invalid integer value)"
+
+O db-sync v13.6.0.4 não aceita `POSTGRES_HOST=127.0.0.1` — ele interpreta
+o IP como parte da string de conexão de forma incorreta.
+
+**Solução:** use `POSTGRES_HOST=localhost` (já corrigido no script).
+
+### /tmp sem espaço (tmpfs cheio)
+
+O `/tmp` do Ubuntu é um tmpfs (RAM), normalmente com 50% da RAM ou ~12 GB.
+Para downloads grandes (snapshots de ~4 GB), use `/root/` ou `/opt/`.
+
+**Solução:** o script já usa `/root/cexplorer-snapshot-restore` para downloads.

@@ -172,7 +172,7 @@ setup_db_sync() {
   # Restaurar snapshot se --restore
   if [ "$RESTORE_SNAPSHOT" = true ]; then
     info "Modo --restore ativado. Baixando snapshot do db-sync do GitHub..."
-    local SNAPSHOT_DIR="/tmp/cexplorer-snapshot-restore"
+    local SNAPSHOT_DIR="/root/cexplorer-snapshot-restore"
     mkdir -p "${SNAPSHOT_DIR}"
     gh release download v1.0 \
       --repo vdsilveira/MidnIght-Node-Utils \
@@ -190,7 +190,7 @@ setup_db_sync() {
     --restart unless-stopped \
     --network host \
     -e NETWORK="${NETWORK}" \
-    -e POSTGRES_HOST=127.0.0.1 \
+    -e POSTGRES_HOST=localhost \
     -e POSTGRES_PORT=5432 \
     -e POSTGRES_USER="${POSTGRES_USER}" \
     -e POSTGRES_PASSWORD="${POSTGRES_PASSWORD}" \

@@ -13,13 +13,14 @@ set -euo pipefail
 
 RELEASE="${1:-v1.0}"
 REPO="vdsilveira/MidnIght-Node-Utils"
-TMP_DIR="/tmp/cexplorer-restore-$$"
+POSTGRES_USER="${POSTGRES_USER:-midnight}"
+RESTORE_DIR="/root/cexplorer-restore-$$"
 
 RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'; CYAN='\033[0;36m'; NC='\033[0m'
 info()  { echo -e "${CYAN}[INFO]${NC}  $*"; }
 ok()    { echo -e "${GREEN}[OK]${NC}    $*"; }
 
-cleanup() { rm -rf "${TMP_DIR}"; }
+cleanup() { rm -rf "${RESTORE_DIR}"; }
 trap cleanup EXIT
 
 main() {
@@ -59,16 +60,16 @@ main() {
 
   # Baixar snapshot
   info "Baixando snapshot ${RELEASE} do repositório ${REPO}..."
-  mkdir -p "${TMP_DIR}"
+  mkdir -p "${RESTORE_DIR}"
   gh release download "${RELEASE}" \
     --repo "${REPO}" \
-    --dir "${TMP_DIR}"
+    --dir "${RESTORE_DIR}"
 
-  local FILES=("${TMP_DIR}/cexplorer-snapshot-"*.part_*)
+  local FILES=("${RESTORE_DIR}/cexplorer-snapshot-"*.part_*)
   if [ ${#FILES[@]} -eq 0 ]; then
     echo -e "${RED}[ERRO] Nenhum arquivo de snapshot encontrado na release ${RELEASE}${NC}"
-    echo "  Arquivos encontrados em ${TMP_DIR}:"
-    ls -la "${TMP_DIR}"
+    echo "  Arquivos encontrados em ${RESTORE_DIR}:"
+    ls -la "${RESTORE_DIR}"
     exit 1
   fi
 
@@ -80,12 +81,12 @@ main() {
 
   cat "${FILES[@]}" | zstd -d | \
     docker exec -i midnight-postgres \
-      pg_restore -U postgres -d cexplorer --no-owner 2>/dev/null || true
+      pg_restore -U "${POSTGRES_USER}" -d cexplorer --no-owner 2>/dev/null || true
 
   ok "Restore concluído!"
   echo ""
   echo "  Para verificar:"
-  echo "    docker exec -it midnight-postgres psql -U postgres -d cexplorer -c 'SELECT count(*) FROM block;'"
+  echo "    docker exec -it midnight-postgres psql -U ${POSTGRES_USER} -d cexplorer -c 'SELECT count(*) FROM block;'"
   echo ""
   echo "  Agora inicie o cardano-db-sync:"
   echo "    docker run -d --name cardano-db-sync ..."
