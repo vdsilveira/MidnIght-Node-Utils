@@ -56,6 +56,77 @@ docker exec -it midnight-postgres \
 **Snapshot validado:** testado com restore + conexão ao cardano-node + sync contínuo
 sem erros de consenso (4.920.901 blocks, 75 tabelas, 26 GB).
 
+## Conectando ao Midnight Node RPC
+
+Após o setup, o midnight-node expõe a RPC na porta **19944** da VM.
+Para fazer deploy de contratos, consultas e interagir com a rede, escolha
+o método que melhor se adequa ao seu ambiente:
+
+### Opção 1: SSH Tunnel (recomendado para desenvolvimento)
+
+Cria um túnel seguro da sua máquina para a VM. A RPC fica acessível
+localmente em `http://127.0.0.1:19944` sem expor portas na VM.
+
+```bash
+# Tunnel persistente (deixe rodando em segundo plano)
+ssh -L 19944:127.0.0.1:19944 root@<IP-DA-VM> -N
+
+# Testar
+curl -s http://127.0.0.1:19944/
+```
+
+**Vantagens:** segurança máxima, não precisa abrir firewall, funciona atrás de NAT.
+
+### Opção 2: SSH direto via comando (recomendado para CI/CD)
+
+Executa comandos na VM via SSH sem precisar de tunnel:
+
+```bash
+# Comando único, sem tunnel persistente
+ssh root@<IP-DA-VM> "curl -s http://127.0.0.1:19944/"
+```
+
+Ideal para pipelines automatizadas (GitHub Actions, Jenkins, etc.).
+
+### Opção 3: Proxy reverso (NGINX / Caddy)
+
+Para expor a RPC publicamente (ex: acesso de múltiplos usuários ou times):
+
+```nginx
+# /etc/nginx/sites-available/midnight-rpc
+server {
+    listen 443 ssl;
+    server_name rpc.seudominio.com;
+
+    ssl_certificate /etc/ssl/certs/...
+    ssl_certificate_key /etc/ssl/private/...
+
+    location / {
+        proxy_pass http://127.0.0.1:19944;
+        proxy_set_header Host $host;
+    }
+}
+```
+
+> ⚠️ Exigem configuração adicional de SSL, autenticação e firewall.
+
+### Configuração para deploy de contratos
+
+Independente do método escolhido, aponte seu projeto para o endpoint RPC.
+Exemplo com o contrato WDAS:
+
+```bash
+# Se usar SSH tunnel:
+export MIDNIGHT_NODE_URL=http://127.0.0.1:19944
+
+# Se usar SSH direto:
+export MIDNIGHT_NODE_URL=http://127.0.0.1:19944
+# (os comandos rodam dentro da VM via ssh)
+```
+
+> A escolha do método fica a **critério do desenvolvedor**, de acordo com
+> as necessidades de segurança e infraestrutura do projeto.
+
 ### midnight-node (futuro)
 
 Após o node sincronizar completamente, faremos snapshot do diretório `/opt/midnight/midnight/data` para releases futuras.
