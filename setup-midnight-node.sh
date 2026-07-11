@@ -75,11 +75,12 @@ install_deps() {
   # mitril (Mithril client) para baixar snapshot do Cardano
   if ! command -v mitril &>/dev/null; then
     warn "mitril (Mithril) não encontrado. Instalando..."
-    MITHRIL_VERSION="0.10.0"
+    MITHRIL_VERSION="0.13.9"
     wget -q "https://github.com/input-output-hk/mithril/releases/download/${MITHRIL_VERSION}/mithril-client-${MITHRIL_VERSION}-x86_64-unknown-linux-gnu.tar.gz" \
       -O /tmp/mithril-client.tar.gz
-    tar -xzf /tmp/mithril-client.tar.gz -C /usr/local/bin/ mithril-client
-    mv /usr/local/bin/mithril-client /usr/local/bin/mitril
+    tar -xzf /tmp/mithril-client.tar.gz -C /usr/local/bin/ mithril-client 2>/dev/null || \
+    tar -xzf /tmp/mithril-client.tar.gz -C /usr/local/bin/ 2>/dev/null
+    mv /usr/local/bin/mithril-client /usr/local/bin/mitril 2>/dev/null || true
     chmod +x /usr/local/bin/mitril
     rm -f /tmp/mithril-client.tar.gz
     ok "mitril instalado"
@@ -114,14 +115,26 @@ create_dirs() {
 setup_cardano_node() {
   info "Configurando Cardano Node..."
 
-  # Baixar configs da rede via mitril (mais rápido que sync do zero)
-  if [ ! -f "${CARDANO_DIR}/db/ledger" ]; then
-    info "Baixando snapshot do Cardano via Mithril (pode levar alguns minutos)..."
-    mkdir -p "${CARDANO_DIR}/db"
-    mitril cardano-db download \
-      --genesis-verification-key https://raw.githubusercontent.com/input-output-hk/mithril/main/mithril-infra/configuration/pre-release-preview/genesis.vkey \
-      --download-dir "${CARDANO_DIR}/db" \
-      --network preprod || warn "Falha ao baixar snapshot Mithril — o node fará sync completo (mais lento)"
+  # Baixar snapshot via Mithril (evita sync completo do cardano-node)
+  if [ ! -f "${CARDANO_DIR}/data/db/ledger" ]; then
+    info "Baixando snapshot do Cardano via Mithril (17 GB, pode levar alguns minutos)..."
+    rm -rf /tmp/mithril-download
+    mkdir -p /tmp/mithril-download
+    if mitril cardano-db download latest \
+      --aggregator-endpoint "auto:release-preprod" \
+      --genesis-verification-key "7f497ca1068983d5cf75c655b0c7a2f1447b77910de8f331e502f9cdcd27eb2c" \
+      --include-ancillary \
+      --ancillary-verification-key "bdc0d89672d8edd22d1215c4d0f69202fcf3fbc51c9dcc911e0ee4a881538824" \
+      --download-dir /tmp/mithril-download \
+      --allow-override; then
+      mkdir -p "${CARDANO_DIR}/data"
+      mv /tmp/mithril-download/db "${CARDANO_DIR}/data/db"
+      rm -rf /tmp/mithril-download
+      ok "Snapshot Mithril restaurado (${CARDANO_DIR}/data/db)"
+    else
+      rm -rf /tmp/mithril-download
+      warn "Falha ao baixar snapshot Mithril — o node fará sync completo (mais lento)"
+    fi
   else
     ok "Banco do Cardano já existe, pulando download"
   fi
